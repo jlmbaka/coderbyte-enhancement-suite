@@ -1,6 +1,10 @@
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+chrome.runtime.onMessage.addListener(async function (
+  request,
+  sender,
+  sendResponse
+) {
   if (request.message === "clicked_browser_action") {
-    const testResults = extractTestResultsFromPage();
+    const testResults = await extractTestResultsFromPage();
     const csvContent = createCsvContent(testResults);
     const csvUrl = configureCsvForDownload(csvContent);
     downloadCsv(csvUrl);
@@ -16,9 +20,11 @@ function configureCsvForDownload(csvContent) {
 }
 
 function downloadCsv(csvUrl) {
+  const filename = document.querySelector("h2");
   chrome.runtime.sendMessage({
     message: "download_csv",
     url: csvUrl,
+    filename,
   });
 }
 
@@ -29,13 +35,35 @@ function createCsvContent(result) {
     .replace(/(^\[)|(\]$)/gm, "");
 }
 
-function extractTestResultsFromPage() {
+async function extractTestResultsFromPage() {
   const dashboard = document.querySelectorAll(
     "li.mainTableHeaderRow, li.candidateRow.candidateRow"
   );
-  const result = [...dashboard].map((line) => {
-    return [...line.children].map((item) => item.innerText.trim());
+
+  const actionsIndex = 7;
+  const results = [...dashboard].map((line, i) => {
+    return [...line.children].map((item, j) => {
+      if (j === actionsIndex) {
+        const url =
+          i === 0 ? item.innerText.trim() : item.querySelector("a").href;
+        return url;
+      }
+      return item.innerText.trim();
+    });
   });
-  console.log(result);
-  return result;
+
+  const details_url = results.map((result_row) => result_row[actionsIndex]);
+  const length = details_url.length;
+  let index = 1;
+  for (const url of details_url) {
+    const response = await fetch(url);
+    if (response.ok) {
+      const text = await response.text();
+      console.log(`${index} / ${length}`);
+    }
+    index++;
+  }
+
+  console.log(results);
+  return results;
 }
